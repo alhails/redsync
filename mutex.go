@@ -3,6 +3,7 @@ package redsync
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
@@ -50,6 +51,9 @@ func (m *Mutex) Lock() error {
 
 		now := time.Now()
 		until := now.Add(m.expiry - now.Sub(start) - time.Duration(int64(float64(m.expiry)*m.factor)))
+		fmt.Printf("checking quorum: %d >= %d\n", n, m.quorum)
+		fmt.Printf("checking expiry for %s (%s - %s)\n", m.name, now, until)
+
 		if n >= m.quorum && now.Before(until) {
 			m.value = value
 			m.until = until
@@ -91,7 +95,13 @@ func genValue() (string, error) {
 func (m *Mutex) acquire(pool Pool, value string) bool {
 	conn := pool.Get()
 	defer conn.Close()
+	fmt.Printf("setting %s:%s\n", m.name, value)
 	reply, err := redis.String(conn.Do("SET", m.name, value, "NX", "PX", int(m.expiry/time.Millisecond)))
+	if err != nil {
+		fmt.Printf("setting %s:%s failed: %s\n", m.name, value, err.Error())
+	} else {
+		fmt.Printf("setting %s:%s success\n", m.name, value)
+	}
 	return err == nil && reply == "OK"
 }
 
